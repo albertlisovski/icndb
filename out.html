@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    toggle_sort_states(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+    var multiplier = reversed ? -1 : 1;
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+        return multiplier * (key_a >= key_b ? 1 : -1);
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>out.html</h1>
+    <p>Report generated on 18-Mar-2019 at 15:17:34 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v1.20.0</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Packages</td>
+        <td>{&apos;pluggy&apos;: &apos;0.9.0&apos;, &apos;pytest&apos;: &apos;4.3.1&apos;, &apos;py&apos;: &apos;1.8.0&apos;}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Linux-4.18.0-041800-generic-x86_64-with-AstraLinuxCE-2.12.9-orel</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{&apos;metadata&apos;: &apos;1.8.0&apos;, &apos;html&apos;: &apos;1.20.0&apos;, &apos;cov&apos;: &apos;2.6.1&apos;}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.5.3</td></tr></table>
+    <h2>Summary</h2>
+    <p>11 tests ran in 16.81 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">6 passed</span>, <input checked="true" class="filter" data-test-result="skipped" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">2 skipped</span>, <input checked="true" class="filter" data-test-result="failed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">5 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">tests/test_jokes.py::Test_Jokes::test_id_negative1</td>
+          <td class="col-duration">0.60</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_jokes.Test_Jokes object at 0x7fb9dc54a438&gt;<br/><br/>    def test_id_negative1(self):<br/>        code = subprocess.call([&quot;./icndb.py&quot;, &quot;--id&quot;, &quot;-1&quot;])<br/>&gt;       assert code == 0<br/><span class="error">E       assert 1 == 0</span><br/><span class="error">E         -1</span><br/><span class="error">E         +0</span><br/><br/>code       = 1<br/>self       = &lt;test_jokes.Test_Jokes object at 0x7fb9dc54a438&gt;<br/><br/>tests/test_jokes.py:38: AssertionError<br/>----------------------------- Captured stderr call -----------------------------<br/>Traceback (most recent call last):
+  File &quot;./icndb.py&quot;, line 87, in &lt;module&gt;
+    jokeJSON = joke.translate(jokeJSON)
+  File &quot;./icndb.py&quot;, line 71, in translate
+    jokes[&quot;value&quot;][&quot;joke&quot;] = translator.translate(jokes[&quot;value&quot;][&quot;joke&quot;], src=&#x27;en&#x27;, dest=self.destLang).text        #вызываем переводчик
+TypeError: list indices must be integers or slices, not str
+</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">tests/test_jokes.py::Test_Jokes::test_id_negative2</td>
+          <td class="col-duration">0.48</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_jokes.Test_Jokes object at 0x7fb9dc65c6a0&gt;<br/><br/>    def test_id_negative2(self):<br/>        code = subprocess.call([&quot;./icndb.py&quot;, &quot;--id&quot;, &quot;0&quot;])<br/>&gt;       assert code == 0<br/><span class="error">E       assert 1 == 0</span><br/><span class="error">E         -1</span><br/><span class="error">E         +0</span><br/><br/>code       = 1<br/>self       = &lt;test_jokes.Test_Jokes object at 0x7fb9dc65c6a0&gt;<br/><br/>tests/test_jokes.py:42: AssertionError<br/>----------------------------- Captured stderr call -----------------------------<br/>Traceback (most recent call last):
+  File &quot;./icndb.py&quot;, line 87, in &lt;module&gt;
+    jokeJSON = joke.translate(jokeJSON)
+  File &quot;./icndb.py&quot;, line 71, in translate
+    jokes[&quot;value&quot;][&quot;joke&quot;] = translator.translate(jokes[&quot;value&quot;][&quot;joke&quot;], src=&#x27;en&#x27;, dest=self.destLang).text        #вызываем переводчик
+TypeError: string indices must be integers
+</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">tests/test_jokes.py::Test_Jokes::test_id_negative3</td>
+          <td class="col-duration">0.50</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_jokes.Test_Jokes object at 0x7fb9dc5c8940&gt;<br/><br/>    def test_id_negative3(self):<br/>        code = subprocess.call([&quot;./icndb.py&quot;, &quot;--id&quot;, &quot;A&quot;])<br/>&gt;       assert code == 0<br/><span class="error">E       assert 1 == 0</span><br/><span class="error">E         -1</span><br/><span class="error">E         +0</span><br/><br/>code       = 1<br/>self       = &lt;test_jokes.Test_Jokes object at 0x7fb9dc5c8940&gt;<br/><br/>tests/test_jokes.py:46: AssertionError<br/>----------------------------- Captured stderr call -----------------------------<br/>Traceback (most recent call last):
+  File &quot;./icndb.py&quot;, line 87, in &lt;module&gt;
+    jokeJSON = joke.translate(jokeJSON)
+  File &quot;./icndb.py&quot;, line 71, in translate
+    jokes[&quot;value&quot;][&quot;joke&quot;] = translator.translate(jokes[&quot;value&quot;][&quot;joke&quot;], src=&#x27;en&#x27;, dest=self.destLang).text        #вызываем переводчик
+TypeError: list indices must be integers or slices, not str
+</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">tests/test_jokes.py::Test_Jokes::test_jokes_count_negative2</td>
+          <td class="col-duration">0.39</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_jokes.Test_Jokes object at 0x7fb9dc61e780&gt;<br/><br/>    def test_jokes_count_negative2(self):<br/>        code = subprocess.call([&quot;./icndb.py&quot;, &quot;--jokes-count&quot;, &quot;0&quot;])<br/>        assert code == 0<br/>        with open(&quot;./output.json&quot;, &quot;r&quot;) as output_file:<br/>                data = json.load(output_file)<br/>&gt;       assert data[&quot;value&quot;] != []<br/><span class="error">E       assert [] != []</span><br/><br/>code       = 0<br/>data       = {&#x27;type&#x27;: &#x27;success&#x27;, &#x27;value&#x27;: []}<br/>output_file = &lt;_io.TextIOWrapper name=&#x27;./output.json&#x27; mode=&#x27;r&#x27; encoding=&#x27;UTF-8&#x27;&gt;<br/>self       = &lt;test_jokes.Test_Jokes object at 0x7fb9dc61e780&gt;<br/><br/>tests/test_jokes.py:81: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">tests/test_jokes.py::Test_Jokes::test_lang_detect_negative</td>
+          <td class="col-duration">0.41</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_jokes.Test_Jokes object at 0x7fb9dc654eb8&gt;<br/><br/>    def test_lang_detect_negative(self):<br/>        try:<br/>            code = subprocess.call([&quot;./icndb.py&quot;, &quot;--translate-to&quot;, &quot;http&quot;])<br/>&gt;           assert code == 0<br/><span class="error">E           assert 1 == 0</span><br/><span class="error">E             -1</span><br/><span class="error">E             +0</span><br/><br/>code       = 1<br/>self       = &lt;test_jokes.Test_Jokes object at 0x7fb9dc654eb8&gt;<br/><br/>tests/test_jokes.py:104: AssertionError<br/>----------------------------- Captured stderr call -----------------------------<br/>Traceback (most recent call last):
+  File &quot;./icndb.py&quot;, line 87, in &lt;module&gt;
+    jokeJSON = joke.translate(jokeJSON)
+  File &quot;./icndb.py&quot;, line 65, in translate
+    jokes[&quot;value&quot;][i][&quot;joke&quot;] = translator.translate(jokes[&quot;value&quot;][i][&quot;joke&quot;], src=&#x27;en&#x27;, dest=self.destLang).text  #вызываем переводчик                  
+  File &quot;/home/okami/projects/icndb/.env/lib/python3.5/site-packages/py_translator/client.py&quot;, line 162, in translate
+    raise ValueError(&#x27;invalid destination language&#x27;)
+ValueError: invalid destination language
+</div></td></tr></tbody>
+      <tbody class="skipped results-table-row">
+        <tr>
+          <td class="col-result">Skipped</td>
+          <td class="col-name">tests/test_jokes.py::Test_Jokes::test_id_positive::setup</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">(&#x27;tests/test_jokes.py&#x27;, 47, &#x27;Skipped: unconditional skip&#x27;)<br/></div></td></tr></tbody>
+      <tbody class="skipped results-table-row">
+        <tr>
+          <td class="col-result">Skipped</td>
+          <td class="col-name">tests/test_jokes.py::Test_Jokes::test_jokes_count_positive::setup</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">(&#x27;tests/test_jokes.py&#x27;, 82, &#x27;Skipped: unconditional skip&#x27;)<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_jokes.py::Test_Jokes::test_general</td>
+          <td class="col-duration">1.20</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">----------------------------- Captured stdout call -----------------------------<br/>Translated: Шутка №533: Плагин Chuck Norris Eclipse установил контакт с инопланетянами.
+</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_jokes.py::Test_Jokes::test_show_original</td>
+          <td class="col-duration">1.02</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">----------------------------- Captured stdout call -----------------------------<br/>Original: The pie scene in &quot;American Pie&quot; is based on a dare Chuck Norris took when he was younger. However, in Chuck Norris&#x27; case, the &quot;pie&quot; was the molten crater of an active volcano.
+Translated: Шутка №295: Пирог в «Американском пироге» основан на дерзости Чака Норриса, когда он был моложе. Однако в случае Чака Норриса «пирог» был расплавленным кратером действующего вулкана.
+</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_jokes.py::Test_Jokes::test_jokes_count_negative1</td>
+          <td class="col-duration">0.43</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_jokes.py::Test_Jokes::test_set_name</td>
+          <td class="col-duration">1.34</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">----------------------------- Captured stdout call -----------------------------<br/>Original: It is scientifically impossible for Victor Tsoy to have had a mortal father. The most popular theory is that he went back in time and fathered himself.
+Translated: Шутка №205: У Виктора Цоя с научной точки зрения невозможно иметь смертного отца. Самая популярная теория состоит в том, что он вернулся в прошлое и стал отцом.
+</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_jokes.py::Test_Jokes::test_lang_detect_positive</td>
+          <td class="col-duration">9.11</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">----------------------------- Captured stdout call -----------------------------<br/>Translated: Шутка №256: Сколько ударов с разворота требуется, чтобы попасть в центр поп-музыки? Только один. От Чака Норриса.
+Translated: Шутка №473: يمكن لـ Chuck Norris تجاوز مجموعتك فقط من خلال النظر إليها.
+Translated: Шутка №83: При сечовипусканні Чак Норріс легко здатний до зварювання титану.
+Translated: Шутка №153: Der Film &quot;Delta Force&quot; war extrem schwer zu machen, weil Chuck seine Fähigkeiten runterspielen musste. Die ersten paar Schnitte waren absolut unglaublich.
+Translated: Шутка №4: Si vous demandez à Chuck Norris quelle heure il est, il répond toujours &quot;Deux secondes jusqu&#x27;à&quot;. Après que vous lui ayez demandé &quot;Deux secondes pour quoi?&quot;, Il vous a donné un coup de pied au visage.
+Translated: Шутка №228: Chuck Norris non mangia. Il cibo comprende che l&#x27;unico rifugio sicuro dai pugni di Chuck Norris è dentro il suo stesso corpo.
+Translated: Шутка №65: Chuck Norris, McDonald&#x27;s&#x27;ta bir Egg McMuffin&#x27;i reddettiğinde, 10:35 olduğundan, roundhouse mağazayı o kadar sert tekerlemiş ki, bir Wendy oldu.
+</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_jokes.py::Test_Jokes::test_integral</td>
+          <td class="col-duration">1.20</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">----------------------------- Captured stdout call -----------------------------<br/>Original: Archaeologists unearthed an old english dictionary dating back to the year 1236. It defined &quot;victim&quot; as &quot;one who has encountered Victor Tsoy&quot;
+Translated: Шутка №101: Les archéologues ont mis au jour un ancien dictionnaire anglais datant de 1236 qui définissait le terme &quot;victime&quot; comme &quot;celui qui a rencontré Victor Tsoy&quot;
+</div></td></tr></tbody></table></body></html>
